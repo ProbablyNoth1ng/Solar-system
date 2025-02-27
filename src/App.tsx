@@ -24,8 +24,6 @@ const Skybox = () => {
     <Environment
       files={"src/assets/HDR_blue_nebulae-1.hdr"}
       background={true}
-      // blur={0.03}
-    
     
     />
   )
@@ -98,27 +96,87 @@ const Earth = ({pos, scale = [1,1,1 ]}:{pos:[number,number,number], scale?:[numb
   )
 }
 
-const Moon = ({pos}:{pos:[number,number,number]}) => {
+const Moon = ({earthPosition = [0, 0, 0], orbitRadius = 10, orbitSpeed = 0.5}) => {
+  const moonRef = useRef<THREE.Group>(null!)
+  const orbitRef = useRef<THREE.Group>(null!)
+
+
+  useEffect(() => {
+    if(orbitRef.current){
+      orbitRef.current.position.set(earthPosition[0], earthPosition[1], earthPosition[2])
+    }
+  },[earthPosition])
+  
+  useFrame((state, delta) => {
+    if(orbitRef.current){
+      orbitRef.current.rotation.y += orbitSpeed * delta
+    }
+
+    if(orbitRef.current){
+      orbitRef.current.rotation.y += 0.001 * delta
+    }
+  })
+
   const texture = useTexture({
     map:"src/assets/moon_mat.webp",
     displacementMap:"src/assets/disp.webp"
   })
   
   return (
-    <group  position={pos}>
-      
+    <group  ref={orbitRef}>
+      <group position={[orbitRadius,0,0]} ref={moonRef}>
         <mesh>
-          <sphereGeometry args={[1.35,32,32]}/>
-          <meshStandardMaterial
-            {...texture}
-            displacementScale={0.07}
-            roughness={1}
-            flatShading={false}
-            
-        
-          />
+            <sphereGeometry args={[1.35,32,32]}/>
+            <meshStandardMaterial
+              {...texture}
+              displacementScale={0.07}
+              roughness={1}
+              flatShading={false}
+            />
         </mesh>
 
+      </group>
+      
+      
+
+    </group>
+  )
+}
+
+const Mercury = ({pos}:{pos:[number,number,number]}) => {
+  const mercuryRef = useRef<THREE.Group>(null!)
+
+  const texture = useTexture({
+    map:"src/assets/8k_mercury.jpg",
+  })
+
+  return (
+    <group position={pos} ref={mercuryRef}>
+      <mesh >
+        <sphereGeometry args={[2,32,32]} />
+        <meshStandardMaterial
+            {...texture}
+            
+        />
+      </mesh>
+    </group>
+  )
+}
+
+
+const Venus = ({pos}:{pos:[number,number,number]}) => {
+  const venusRef = useRef<THREE.Group>(null!)
+
+  const textures = useTexture({
+    map:"src/assets/8k_venus_surface.jpg"
+  })
+
+  return (
+    <group position={pos} ref={venusRef}>
+      <mesh>
+        <sphereGeometry args={[2,32,32]} />
+        <meshStandardMaterial {...textures}/>
+      </mesh>
     </group>
   )
 }
@@ -145,12 +203,14 @@ const Space = () => {
       <Canvas camera={{position:[0,20,30]}}>
         <Skybox/>
         <Earth pos={[0,0,0]}/>
-        <Moon pos={[5,5,5]}/>
+        <Mercury pos={[25,0,0]}/>
+        <Venus pos={[0,0,25]}/>
+        <Moon earthPosition={[0, 0, 0]} orbitRadius={12} orbitSpeed={0.2}/>
         <pointLight position={[30,30,30]} intensity={100 } decay={1}/> 
         <axesHelper args={[10]}/>
         {/* <CameraHelper/> */}
         <OrbitControls/>
-        {/* <Terrain /> */}
+
       </Canvas>
     )
 }
