@@ -1,23 +1,67 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, Suspense } from 'react'
 import * as THREE from 'three';
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { Environment, PerspectiveCamera, Plane, Sphere, useHelper, useTexture, OrbitControls, Html } from '@react-three/drei'
+import './App.scss'
 
-import { Canvas, useFrame, useThree  } from '@react-three/fiber'
-import { Environment, OrbitControls, PerspectiveCamera, Plane, Sphere, useHelper, useTexture } from '@react-three/drei'
+interface OrbitalPlanetProps {
+  sunPosition?: [number, number, number];
+  orbitRadius?: number;
+  orbitSpeed?: number;
+  rotationSpeed?: number;
+  size?: number;
+  textureMap: string;
+  segments?: number;
+  initialAngle?: number;
+}
 
-import './App.css'
+interface EarthProps{
+  sunPosition?: [number,number,number],
+  orbitRadius:number,
+  orbitSpeed:number, 
+  rotationSpeed:number,
+  size:number,
+  initialAngle:number,
+}
+
+const OrbitalPlanet = ({
+  sunPosition = [0, 0, 0], 
+  orbitRadius = 10, 
+  orbitSpeed = 0.1, 
+  rotationSpeed = 0.004,
+  size = 1,
+  textureMap,
+  segments = 32,
+  initialAngle = 0
+}: OrbitalPlanetProps) => {
+  const planetRef = useRef<THREE.Group>(null!)
+  const orbitRef = useRef<THREE.Group>(null!)
+  const texture = useTexture(textureMap);
 
 
-// const [lastRender, setLastRender] = useState(0);
 
-// useFrame((state, delta) => {
-//   const now = performance.now();
-//   // Limit to ~30 fps
-//   if (now - lastRender >= 33) {
-//     // Your animation code here
-//     setLastRender(now);
-//   }
-// });
+  useFrame((state,delta) => {
+    if(orbitRef.current){
+      orbitRef.current.rotation.y += orbitSpeed * delta
+    }
 
+    if(planetRef.current){
+      planetRef.current.rotation.y += rotationSpeed * delta
+    }
+
+  })
+
+  return (
+    <group ref={orbitRef} position={sunPosition} rotation-y={initialAngle}>
+        <group position={[orbitRadius,0,0]} ref={planetRef}>
+        <mesh>
+          <sphereGeometry args={[size, segments, segments]} />
+          <meshStandardMaterial map={texture}  />
+        </mesh>
+      </group>
+    </group>
+  )
+}
 
 const Skybox = () => {
   return (
@@ -33,9 +77,42 @@ const Skybox = () => {
 
 
 
-const Earth = ({pos, scale = [1,1,1 ]}:{pos:[number,number,number], scale?:[number,number,number]}) => {
+const Sun =({pos, size = 5}:{pos:[number,number,number], size:number}) => {
+  const sunRef = useRef<THREE.Group>(null!)
+
+  const textures = useTexture({
+    map:"src/assets/8k_sun.webp",
+  })
+
+  return (
+    <group position={pos} >
+      <mesh ref={sunRef} >
+        <sphereGeometry args={[size,64,64]}/>
+        <meshStandardMaterial 
+          {...textures }
+          emissive={new THREE.Color(0xffddaa)}
+          emissiveIntensity={0.01}
+
+        />
+      </mesh>
+      <mesh>
+        <sphereGeometry args={[size * 1.2, 32, 32]} />
+        <meshBasicMaterial
+          color={new THREE.Color(0xffddaa)}
+          transparent={true}
+          opacity={0.15}
+          side={THREE.BackSide}
+        />
+      </mesh>
+    </group>
+  )
+}
+
+
+const Earth = ({sunPosition = [0,0,0],orbitRadius = 30 , orbitSpeed = 0.05, size = 1, initialAngle = 0, rotationSpeed}:EarthProps) => {
   const earthRef  = useRef<THREE.Mesh>(null!)
   const cloudsRef = useRef<THREE.Mesh>(null!)
+  const orbitRef = useRef<THREE.Mesh>(null!)
 
   const textures = useTexture({
     map: "src/assets/Albedo.webp",           
@@ -47,10 +124,14 @@ const Earth = ({pos, scale = [1,1,1 ]}:{pos:[number,number,number], scale?:[numb
 
   const cloudTexture = useTexture("src/assets/8k_earth_clouds.webp")
 
-
   useFrame((state,delta) => {
+
+    if(orbitRef.current){
+      orbitRef.current.rotation.y += orbitSpeed * delta
+    }
+
     if(earthRef.current){
-      earthRef.current.rotation.y += 0.0015 * delta
+      earthRef.current.rotation.y += rotationSpeed * delta
     }
 
     if(cloudsRef.current){
@@ -60,9 +141,10 @@ const Earth = ({pos, scale = [1,1,1 ]}:{pos:[number,number,number], scale?:[numb
   })
 
   return(
-    <group position={pos} scale={scale}>
+    <group ref={orbitRef}  position={sunPosition} rotation-y={initialAngle}>
+      <group position={[orbitRadius,0,0]}>
       <mesh ref={earthRef} >
-      <sphereGeometry args={[5, 64, 64]} />
+      <sphereGeometry  args={[size, 64, 64]} />
         <meshStandardMaterial 
           map={textures.map}
           normalMap={textures.normalMap}
@@ -77,7 +159,7 @@ const Earth = ({pos, scale = [1,1,1 ]}:{pos:[number,number,number], scale?:[numb
     </mesh>
 
     <mesh ref={cloudsRef}>
-        <sphereGeometry args={[5.05, 64, 64]} />
+        <sphereGeometry args={[size * 1.02, 64, 64]} />
         <meshStandardMaterial 
           map={cloudTexture}
           transparent={true}
@@ -89,49 +171,30 @@ const Earth = ({pos, scale = [1,1,1 ]}:{pos:[number,number,number], scale?:[numb
         />
     </mesh>
 
-
-
+    <Moon earthPosition={[0, 0, 0]} orbitRadius={size * 2.5} orbitSpeed={0.5} size={size * 0.27} />
+     </group>
     </group>
     
   )
 }
 
-const Moon = ({earthPosition = [0, 0, 0], orbitRadius = 10, orbitSpeed = 0.5}) => {
+const Moon = ({earthPosition = [0, 0, 0], orbitRadius = 1, orbitSpeed = 0.1, size = 0.27}) => {
   const moonRef = useRef<THREE.Group>(null!)
   const orbitRef = useRef<THREE.Group>(null!)
 
 
-  useEffect(() => {
-    if(orbitRef.current){
-      orbitRef.current.position.set(earthPosition[0], earthPosition[1], earthPosition[2])
-    }
-  },[earthPosition])
-  
-  useFrame((state, delta) => {
-    if(orbitRef.current){
-      orbitRef.current.rotation.y += orbitSpeed * delta
-    }
-
-    if(orbitRef.current){
-      orbitRef.current.rotation.y += 0.001 * delta
-    }
-  })
-
   const texture = useTexture({
     map:"src/assets/moon_mat.webp",
-    displacementMap:"src/assets/disp.webp"
   })
   
   return (
-    <group  ref={orbitRef}>
+    <group  ref={orbitRef} position={[earthPosition[0],0,0]} rotation-y={orbitSpeed}>
       <group position={[orbitRadius,0,0]} ref={moonRef}>
         <mesh>
-            <sphereGeometry args={[1.35,32,32]}/>
+            <sphereGeometry  args={[size, 32, 32]}  />
             <meshStandardMaterial
-              {...texture}
-              displacementScale={0.07}
+              {...texture}  
               roughness={1}
-              flatShading={false}
             />
         </mesh>
 
@@ -143,192 +206,175 @@ const Moon = ({earthPosition = [0, 0, 0], orbitRadius = 10, orbitSpeed = 0.5}) =
   )
 }
 
-const Mercury = ({pos}:{pos:[number,number,number]}) => {
-  const mercuryRef = useRef<THREE.Group>(null!)
 
-  const texture = useTexture({
-    map:"src/assets/8k_mercury.webp",
-  })
 
+const CanvasLoader = () => {
   return (
-    <group position={pos} ref={mercuryRef}>
-      <mesh >
-        <sphereGeometry args={[2,32,32]} />
-        <meshStandardMaterial
-            {...texture}
-            
-        />
-      </mesh>
-    </group>
+    <Html center className=''>
+      <div className="text-5xl font-bold text-blue-600 mb-6   flex justify-center htt">Loading Solar System...</div>
+    </Html>
   )
 }
-
-
-const Venus = ({pos}:{pos:[number,number,number]}) => {
-  const venusRef = useRef<THREE.Group>(null!)
-
-  const textures = useTexture({
-    map:"src/assets/8k_venus_surface.webp"
-  })
-
-  return (
-    <group position={pos} ref={venusRef}>
-      <mesh>
-        <sphereGeometry args={[2,32,32]} />
-        <meshStandardMaterial {...textures}/>
-      </mesh>
-    </group>
-  )
-}
-
-
-const Mars = ({pos}:{pos:[number,number,number]}) => {
-  const marsRef = useRef<THREE.Group>(null!)
-
-  const textures = useTexture({
-    map:"src/assets/8k_mars.webp",
-    normalMap:"src/assets/mars_1k_normal.jpg",
-    
-  })
-
-  return (
-    <group position={pos} ref={marsRef}>
-      <mesh>
-        <sphereGeometry args={[2,32,32]} />
-        <meshStandardMaterial {...textures }/>
-      </mesh>
-    </group>
-  )
-}
-
-const Jupiter = ({pos}:{pos:[number,number,number]}) => {
-  const jupiterRef = useRef<THREE.Group>(null!)
-
-  const textures = useTexture({
-    map:"src/assets/8k_jupiter.webp",
-   
-    
-  })
-
-  return (
-    <group position={pos} ref={jupiterRef}>
-      <mesh>
-        <sphereGeometry args={[2,32,32]} />
-        <meshStandardMaterial {...textures }/>
-      </mesh>
-    </group>
-  )
-}
-
-const Saturn = ({pos}:{pos:[number,number,number]}) => {
-  const saturnRef = useRef<THREE.Group>(null!)
-
-  const textures = useTexture({
-    map:"src/assets/8k_saturn.webp",
-
-   
-    
-  })
-
-  return (
-    <group position={pos} ref={saturnRef}>
-      <mesh>
-        <sphereGeometry args={[2,32,32]} />
-        <meshStandardMaterial {...textures }/>
-      </mesh>
-    </group>
-  )
-}
-
-const Uranus = ({pos}:{pos:[number,number,number]}) => {
-  const saturnRef = useRef<THREE.Group>(null!)
-
-  const textures = useTexture({
-    map:"src/assets/2k_uranus.webp",
-
-   
-    
-  })
-
-  return (
-    <group position={pos} ref={saturnRef}>
-      <mesh>
-        <sphereGeometry args={[2,32,32]} />
-        <meshStandardMaterial {...textures }/>
-      </mesh>
-    </group>
-  )
-}
-
-
-const Neptune = ({pos}:{pos:[number,number,number]}) => {
-  const saturnRef = useRef<THREE.Group>(null!)
-
-  const textures = useTexture({
-    map:"src/assets/2k_neptune.webp",
-
-   
-    
-  })
-
-  return (
-    <group position={pos} ref={saturnRef}>
-      <mesh>
-        <sphereGeometry args={[2,32,32]} />
-        <meshStandardMaterial {...textures }/>
-      </mesh>
-    </group>
-  )
-}
-// const CameraHelper = () => {
-//   const cameraRef = useRef<THREE.PerspectiveCamera>(null!)
-
-//   useEffect(() => {
-//     if(cameraRef.current){
-//       cameraRef.current.position.set(0,3,10)
-//       cameraRef.current.lookAt(0,0,0)
-//     }
-//   })
-
-//   useHelper(cameraRef,THREE.CameraHelper)
-
-//     return <group >
-//       <PerspectiveCamera ref={cameraRef} args={[60,1,1,3]}/>
+// const Torus = ({orbitRadius}: {orbitRadius: number}) => { // for saturn
+//   return (
+//     <group position={[0,0,0]}  >
+//       <mesh>
+//         <torusGeometry 
+//           args={[
+//             orbitRadius,  
+//             0.05,         // Thin tube for the orbit line
+//             2,            // Low radial segments for performance
+//             64,           // More tubular segments for smoother circle
+//             Math.PI * 2 
+//           ]}
+          
+//         />
+//         <meshStandardMaterial color={"white"} />
+//       </mesh>
 //     </group>
+//   )
 // }
 
+const Torus = ({orbitRadius}: {orbitRadius: number}) => {
+  return (
+    <group position={[0,0,0]} rotation={[Math.PI / 2, 0, 0]} >
+      <mesh>
+        <torusGeometry 
+          args={[
+            orbitRadius,  
+            0.02,         // Thin tube for the orbit line
+            2,            // Low radial segments for performance
+            128,           // More tubular segments for smoother circle
+            Math.PI * 2 
+          ]}
+          
+        />
+        <meshStandardMaterial 
+         color={"white"} 
+         transparent={true}
+         opacity={0.5}
+          />
+      </mesh>
+    </group>
+  )
+}
 
 const Space = () => { 
+  const sunPosition: [number, number, number] = [0, 0, 0];
+  const sunSize = 5;
+  const distanceScale = 5; 
     return (
       <Canvas camera={{position:[0,20,30]}}>
+        <Suspense fallback={<CanvasLoader />}>
         <Skybox/>
-        <Mercury pos={[25,0,0]}/>
-        <Venus pos={[0,0,25]}/>
-        <Earth pos={[0,0,0]}/>
-        <Mars pos={[0,5,25]}/>
-        <Jupiter pos={[25,5,5]}/>
-        <Saturn pos={[12,15,5]}/>
-        <Uranus pos={[25,25,25]}/>
-        <Neptune pos={[10,5,25]}/>
-        <Moon earthPosition={[0, 0, 0]} orbitRadius={12} orbitSpeed={0.2}/>
-        <pointLight position={[30,30,30]} intensity={100 } decay={1}/> 
-        <axesHelper args={[10]}/>
-        {/* <CameraHelper/> */}
-        <OrbitControls/>
+        <Sun pos={sunPosition} size={sunSize} />
+        <Torus orbitRadius={0.4 * distanceScale + sunSize * 1.5} />
+        <Torus orbitRadius={0.9 * distanceScale + sunSize * 1.5} />
+        <Torus orbitRadius={2 * distanceScale + sunSize * 1.5} />
+        <Torus orbitRadius={3 * distanceScale + sunSize * 1.5} />
+        <Torus orbitRadius={5.2 * distanceScale + sunSize * 1.5} />
+        <Torus orbitRadius={10 * distanceScale + sunSize * 1.5} />
+        <Torus orbitRadius={17 * distanceScale + sunSize * 1.5} />
+        <Torus orbitRadius={21 * distanceScale + sunSize * 1.5} />
 
+        <OrbitalPlanet 
+        sunPosition={sunPosition}
+        orbitRadius={0.4 * distanceScale + sunSize * 1.5}
+        orbitSpeed={0.04}
+        rotationSpeed={0.01}
+        size={0.38}
+        textureMap="src/assets/8k_mercury.webp"
+        initialAngle={Math.random() * Math.PI * 2}
+      />
+        <OrbitalPlanet 
+        sunPosition={sunPosition}
+        orbitRadius={0.9 * distanceScale + sunSize * 1.5}
+        orbitSpeed={0.015}
+        rotationSpeed={0.002} // Venus rotates very slowly
+        size={0.95}
+        textureMap="src/assets/8k_venus_surface.webp"
+        initialAngle={Math.random() * Math.PI * 2}
+      />
+
+      <Earth 
+        sunPosition={sunPosition}
+        orbitRadius={2 * distanceScale + sunSize * 1.5}
+        rotationSpeed={0.009} 
+        orbitSpeed={0.01}
+        size={1.0}
+        initialAngle={Math.random() * Math.PI * 2}
+      />
+
+      <OrbitalPlanet 
+        sunPosition={sunPosition}
+        orbitRadius={3 * distanceScale + sunSize * 1.5}
+        orbitSpeed={0.008}
+        rotationSpeed={0.015}
+        size={0.53}
+        textureMap="src/assets/8k_mars.webp"
+        initialAngle={Math.random() * Math.PI * 2}
+      />
+
+      <OrbitalPlanet 
+        sunPosition={sunPosition}
+        orbitRadius={5.2 * distanceScale + sunSize * 1.5}
+        orbitSpeed={0.01}
+        rotationSpeed={0.04} 
+        size={11.2 * 0.3} 
+        textureMap="src/assets/8k_jupiter.webp"
+        segments={64} 
+        initialAngle={Math.random() * Math.PI * 2}
+      />
+
+      <OrbitalPlanet 
+        sunPosition={sunPosition}
+        orbitRadius={10 * distanceScale + sunSize * 1.5}
+        orbitSpeed={0.005}
+        rotationSpeed={0.038}
+        size={9.5 * 0.3} // Scaled down for visualization
+        textureMap="src/assets/8k_saturn.webp"
+        segments={64}
+        initialAngle={Math.random() * Math.PI * 2}
+      />
+
+      <OrbitalPlanet 
+        sunPosition={sunPosition}
+        orbitRadius={17 * distanceScale + sunSize * 1.5}
+        orbitSpeed={0.0024}
+        rotationSpeed={0.02}
+        size={4.0 * 0.3}
+        textureMap="src/assets/2k_uranus.webp"
+        initialAngle={Math.random() * Math.PI * 2}
+      />
+
+      <OrbitalPlanet 
+        sunPosition={sunPosition}
+        orbitRadius={21 * distanceScale + sunSize * 1.5}
+        orbitSpeed={0.0011}
+        rotationSpeed={0.02}
+        size={3.9 * 0.3}
+        textureMap="src/assets/2k_neptune.webp"
+        initialAngle={Math.random() * Math.PI * 2}
+      />
+        
+       
+        <pointLight position={[0,0,0]} intensity={200} decay={1} /> 
+        <ambientLight intensity={0.1} /> 
+        <OrbitControls/>
+        <axesHelper args={[10]}/>
+        </Suspense>
       </Canvas>
     )
 }
 
 
 function App() {
-
-
+  
   return (
     <>
-     <div className="h-screen">
-        <Space />
-     </div>
+      <div className="h-screen">
+          <Space />
+      </div>
     </>
   )
 }
